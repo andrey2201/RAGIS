@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8">
+  <title>Пешеходна обиколка – София</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    body, html { margin:0; padding:0; height:100%; font-family:sans-serif }
+    #map { height:85%; }
+    #sidebar {
+      position:absolute; top:10px; left:10px;
+      background:white; padding:10px; z-index:1000;
+      max-height:60%; overflow:auto; border-radius:6px;
+      box-shadow:0 0 10px rgba(0,0,0,0.3);
+    }
+    #startBtn {
+      margin-top:10px; padding:6px 12px;
+      background:#28a745; color:white; border:none;
+      border-radius:4px; cursor:pointer;
+    }
+    #timeLabel {
+      position:absolute; top:10px; right:10px;
+      background:rgba(255,255,255,0.9); padding:10px;
+      z-index:1000; border-radius:6px; font-weight:bold;
+    }
+  </style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h4>Избери локации (всички по подразбиране):</h4>
+  <div id="locList"></div>
+  <button id="startBtn">Започни</button>
+</div>
+
+<div id="timeLabel">
+  19:00–22:00 ч.<br><span id="timer">03:00:00</span>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const locations = [
+    {name:"Национален археологически музей", lat:42.69647, lon:23.32459},
+    {name:"Национална галерия (Квадрат 500)", lat:42.69633, lon:23.33422},
+    {name:"Национален етнографски музей", lat:42.69631, lon:23.32707},
+    {name:"Национален природонаучен музей", lat:42.69578, lon:23.32841},
+    {name:"Софийска градска художествена галерия", lat:42.69466, lon:23.32431},
+    {name:"Галерия Средец", lat:42.69692, lon:23.32000},
+    {name:"Галерия Академия", lat:42.69497, lon:23.33396},
+    {name:"Галерия Райко Алексиев", lat:42.69412, lon:23.32863},
+    {name:"Галерия Nuance", lat:42.69378, lon:23.32188},
+    {name:"Галерия Аросита", lat:42.69764, lon:23.33168},
+    {name:"Галерия Сердика", lat:42.70293, lon:23.31995},
+    {name:"Галерия Лик", lat:42.69136, lon:23.31144},
+    {name:"Галерия КО-ОП", lat:42.70349, lon:23.30077},
+    {name:"Галерия Contrast", lat:42.69445, lon:23.31677},
+    {name:"Галерия Intro", lat:42.69371, lon:23.31676},
+    {name:"nOva Art Space", lat:42.69607, lon:23.32429},
+    {name:"Галерия Astry", lat:42.69413, lon:23.31688},
+    {name:"Галерия Doza", lat:42.69779, lon:23.31809},
+    {name:"Little Bird Place", lat:42.69810, lon:23.33208},
+    {name:"Галерия Нирвана", lat:42.69182, lon:23.32225},
+    {name:"Галерия Минерва", lat:42.69421, lon:23.32451},
+    {name:"Галерия Etud", lat:42.68191, lon:23.33199},
+    {name:"Галерия Credo Bonum", lat:42.69405, lon:23.32733},
+    {name:"VIVACOM Art Hall", lat:42.69570, lon:23.33618},
+    {name:"Галерия Алма Матер", lat:42.69413, lon:23.33582},
+    {name:"Галерия Арте", lat:42.68942, lon:23.31312},
+    {name:"Галерия Ракурси", lat:42.69137, lon:23.32380},
+    {name:"Галерия Васка Емануилова", lat:42.69846, lon:23.34166},
+    {name:"One Gallery", lat:42.69548, lon:23.32690},
+    {name:"Галерия Графично", lat:42.69433, lon:23.31697}
+  ];
+
+  const map = L.map('map').setView([42.6975,23.3242],14);
+  let userLatLng = null, timerInt = null;
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© OSM'
+  }).addTo(map);
+
+  const locList = document.getElementById('locList');
+  locations.forEach((loc,i)=>{
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.id = 'cb'+i; cb.checked = true;
+    const lbl = document.createElement('label');
+    lbl.htmlFor = cb.id; lbl.textContent = ' ' + loc.name;
+    locList.append(cb, lbl, document.createElement('br'));
+    L.marker([loc.lat, loc.lon]).bindTooltip(loc.name).addTo(map);
+  });
+
+  map.locate({setView:true, maxZoom:16});
+  map.on('locationfound', e => {
+    userLatLng = e.latlng;
+    L.circleMarker(userLatLng,{ radius:6, color:'blue', fill:true })
+      .addTo(map).bindPopup("Вие сте тук").openPopup();
+  });
+
+  map.on('locationerror', ()=>alert("Не може да се определи местоположение."));
+
+  function haversine(p1, p2){
+    const R = 6371e3;
+    const toRad = x => x * Math.PI / 180;
+    const φ1 = toRad(p1.lat), φ2 = toRad(p2.lat);
+    const Δφ = toRad(p2.lat - p1.lat);
+    const Δλ = toRad(p2.lng - p1.lng);
+    const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function clusterize(points, maxDist=300){
+    const clusters = [];
+    points.forEach(p=>{
+      let assigned = false;
+      for(const cluster of clusters){
+        if(cluster.some(c=>haversine({lat:p.lat,lng:p.lon},{lat:c.lat,lng:c.lon}) < maxDist)){
+          cluster.push(p); assigned = true; break;
+        }
+      }
+      if(!assigned) clusters.push([p]);
+    });
+    return clusters;
+  }
+
+  function greedyPath(points, start){
+    const path = [], remaining = [...points];
+    let curr = start;
+    while(remaining.length){
+      remaining.sort((a,b)=>
+        haversine(curr, {lat:a.lat, lng:a.lon}) -
+        haversine(curr, {lat:b.lat, lng:b.lon})
+      );
+      const next = remaining.shift();
+      path.push(next);
+      curr = {lat: next.lat, lng: next.lon};
+    }
+    return path;
+  }
+
+  document.getElementById('startBtn').onclick = async ()=>{
+    if(!userLatLng){
+      alert("Изчакване за местоположението..."); return;
+    }
+
+    const selected = locations.filter((_,i)=>document.getElementById('cb'+i).checked);
+    if(selected.length === 0){
+      alert("Избери поне една локация."); return;
+    }
+
+    const clusters = clusterize(selected);
+    let curr = {lat: userLatLng.lat, lng: userLatLng.lng};
+    const visited = [];
+
+    while(clusters.length){
+      clusters.sort((a,b)=>{
+        const d1 = haversine(curr, {lat:a[0].lat, lng:a[0].lon});
+        const d2 = haversine(curr, {lat:b[0].lat, lng:b[0].lon});
+        return d1 - d2;
+      });
+      const nextGroup = clusters.shift();
+      const path = greedyPath(nextGroup, curr);
+      visited.push(...path);
+      curr = {lat: path[path.length-1].lat, lng: path[path.length-1].lon};
+    }
+
+    const pts = [userLatLng, ...visited.map(p=>L.latLng(p.lat, p.lon))];
+    const coords = pts.map(p=>`${p.lng},${p.lat}`).join(';');
+    const url = `https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`;
+    const resp = await fetch(url);
+    const json = await resp.json();
+    const route = json.routes[0].geometry.coordinates;
+
+    map.eachLayer(layer=>{
+      if(layer._path) layer.remove();
+    });
+
+    const poly = L.polyline([], {color:'red', weight:4}).addTo(map);
+    let idx=0;
+    const step = ()=>{
+      if(idx < route.length){
+        const [lon,lat] = route[idx];
+        poly.addLatLng([lat,lon]);
+        idx++;
+        setTimeout(step, 30);
+      }
+    };
+    step();
+
+    clearInterval(timerInt);
+    let sec = 3*3600;
+    timerInt = setInterval(()=>{
+      const h = String(Math.floor(sec/3600)).padStart(2,'0');
+      const m = String(Math.floor((sec%3600)/60)).padStart(2,'0');
+      const s = String(sec%60).padStart(2,'0');
+      document.getElementById('timer').textContent = `${h}:${m}:${s}`;
+      if(sec-- <= 0) clearInterval(timerInt);
+    },1000);
+  };
+</script>
+</body>
+</html>
